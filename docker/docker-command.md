@@ -1,37 +1,6 @@
-# Docker常用命令
+# Docker核心知识与常用命令
 
 
-
-## docker pull
-
-docker pull：用于从 Docker 镜像仓库获取镜像。
-
-### docker pull
-
-#### 命令格式
-
-```
-docker pull [选项] [DockerRegistry地址[:端口号]/]仓库名[:标签]
-```
-
-#### 命令说明
-
-- DockerRegistry地址：地址的格式一般是 <域名/IP>[:端口号]。默认地址是 Docker Hub。
-- 仓库名：这里的仓库名是两段式名称，即 <用户名>/<软件名>。对于 Docker Hub，如果不给出用户名，则默认为 library，也就是官方镜像。
-
-#### 示例
-
-```shell
-$ docker pull ubuntu:latest
-```
-
-```shell
-$ docker pull ubuntu:18.04
-```
-
-```shell
-$ docker pull gcr.azk8s.cn/google_containers/hyperkube-amd64:v1.9.2
-```
 
 
 
@@ -66,9 +35,15 @@ $ docker run -it --rm \
 
 
 
-## docker image
+## docker image（镜像）
 
-docker image用于操作镜像，常用的命令如下所述。
+- Docker镜像可以简单理解为未运行的容器。
+- 容器的目的就是运行应用或服务，因此容器的镜像中必须包含应用/服务运行所必需的操作系统和应用文件。
+- 每个镜像的内部是一个精简的仅包含必要的操作系统（OS），同时还包含应用运行所必须的文件和依赖包。Docker镜像就像停止运行的容器。通过docker命令可以从某个镜像启动一个或多个容器。
+- 容器从镜像启动后，在容器未全部停止之前，镜像是无法被删除的。
+- Linux Docker主机本地镜像仓库通常位于`/var/lib/docker/<storage-driver>`
+- 每个Docker镜像仓库服务（Image Registry）可以包含多个镜像仓库（Image Repository），而每个镜像仓库中又可以包含多个不同标签的镜像。因此镜像是存储在镜像仓库服务中的镜像仓库中的。Docker客户端的镜像仓库服务是可配置的，默认使用Docker Hub。
+- 同一个镜像可以根据用户需要设置多个标签。例如同时设置标签为latest和edge。在拉取镜像时，如果没有显式指定标签，默认拉取标签为latest的镜像。注意：latest是一个非强制标签，不保证指向仓库中最新的镜像。
 
 ### docker image ls
 
@@ -76,8 +51,8 @@ docker image用于操作镜像，常用的命令如下所述。
 
 #### 命令格式
 
-```shell
-$ docker image ls
+```
+docker image ls [options]
 ```
 
 #### 命令说明
@@ -88,9 +63,56 @@ $ docker image ls
 
 同时，也可以使用该命令显示虚悬镜像。（具体见示例二说明）
 
-#### 示例
+##### 参数描述
 
-示例一：
+- --filter ( -f )：过滤`docker image ls`命令返回的镜像列表内容。支持如下过滤器：
+  - dangling：可以指定true或false，仅返回悬虚镜像（true），或者非悬虚镜像（false）。
+  - before：返回在之前被创建的全部镜像，需要镜像名称或者ID作为参数。
+  - since：返回指定镜像之后创建的全部镜像。与before用法类似。
+  - label：根据标注（label）的名称或值，对镜像镜像过滤。
+  - reference：用于其他过滤方式
+- -a：显示全部镜像，包括顶层镜像和中间层镜像。
+- --format：对输出的内容进行格式化。
+
+#### 虚悬镜像
+
+```shell
+$ docker image ls -f dangling=true
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+<none>              <none>              00285df0df87        5 days ago          342 MB
+```
+
+上面列表中显示的的镜像是一类特殊的镜像，这些镜像既没有仓库名，也没有标签，均为 `<none>`。这类无标签镜像被称为 ==虚悬镜像(==dangling image) ，在列表中展示为`<none>:<none>`。
+
+通常出现这种情况，是因为构建了一个新镜像，然后为该镜像打了一个已经存在的标签。当次情况出现，Docker会构建新的镜像，然后发现已经有镜像包含相同的标签，接着Docker会移除旧镜像上面的标签，并将该标签标在新的镜像之上。同时移除了旧镜像上面对应的标签，旧镜像就变成了悬虚镜像。
+
+可以用下面的命令专门显示这类镜像：
+
+```shell
+$ docker image ls -f dangling=true
+```
+
+一般来说，虚悬镜像已经失去了存在的价值，是可以随意删除的，可以用下面的命令删除。
+
+```shell
+$ docker image prune
+```
+
+如果添加了`-a`参数，Docker会额外移除没有被任何容器使用的镜像。
+
+#### 中间层镜像
+
+为了加速镜像构建、重复利用资源，Docker 会利用 **中间层镜像**。中间层镜像，是其它镜像所依赖的镜像。
+
+默认的 `docker image ls` 列表中只会显示顶层镜像，如果希望显示包括中间层镜像在内的所有镜像的话，需要加 `-a` 参数。
+
+```shell
+$ docker image ls -a
+```
+
+#### 综合示例
+
+示例一：列出当前已下载的镜像。
 
 ```shell
 $ docker image ls
@@ -106,57 +128,19 @@ ubuntu              latest              f753707788c5        4 weeks ago         
 
 **镜像 ID** 则是镜像的唯一标识，一个镜像可以对应多个 **标签**。例如上面的`ubuntu:18.04` 和 `ubuntu:latest` 拥有相同的 ID，因为它们对应的是同一个镜像。
 
-#### **显示虚悬镜像**
-
-```shell
-$ docker image ls -f dangling=true
-REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
-<none>              <none>              00285df0df87        5 days ago          342 MB
-```
-
-上面列表中显示的的镜像是一类特殊的镜像，这些镜像既没有仓库名，也没有标签，均为 `<none>`。原因是随着官方镜像维护，发布了新版本后，原本的镜像名被转移到了新下载的镜像身上，而旧的镜像上的这个名称则被取消，从而成为了 `<none>`。
-
-由于新旧镜像同名，旧镜像名称被取消，从而出现仓库名、标签均为 <none> 的镜像。这类无标签镜像也被称为 ==虚悬镜像(==dangling image) 。
-
-可以用下面的命令专门显示这类镜像：
-
-```shell
-$ docker image ls -f dangling=true
-```
-
-一般来说，虚悬镜像已经失去了存在的价值，是可以随意删除的，可以用下面的命令删除。
-
-```shell
-$ docker image prune
-```
-
-#### 显示中间层镜像
-
-为了加速镜像构建、重复利用资源，Docker 会利用 **中间层镜像**。中间层镜像，是其它镜像所依赖的镜像。
-
-默认的 `docker image ls` 列表中只会显示顶层镜像，如果希望显示包括中间层镜像在内的所有镜像的话，需要加 `-a` 参数。
-
-```shell
-$ docker image ls -a
-```
-
-#### 列出部分镜像
-
-方式一：根据仓库名列出镜像
+示例二：根据仓库名列出镜像
 
 ```shell
 $ docker image ls ubuntu
 ```
 
-方式二：列出特定的某个镜像，也就是说指定仓库名和标签
+示例三：列出特定的某个镜像，也就是说指定仓库名和标签
 
 ```shell
 $ docker image ls ubuntu:18.04
 ```
 
-方式三：使用过滤器参数--filter，或者简写-f。
-
-例如，查看在 `mongo:3.2` 之后建立的镜像：
+示例四：查看在 `mongo:3.2` 之后建立的镜像：
 
 ```shell
 $ docker image ls -f since=mongo:3.2
@@ -164,13 +148,19 @@ $ docker image ls -f since=mongo:3.2
 
 想查看某个位置之前的镜像也可以，只需要把 `since` 换成 `before` 即可。
 
-此外，如果镜像构建时，定义了 `LABEL`，还可以通过 `LABEL` 来过滤。
+示例五：如果镜像构建时，定义了 `LABEL`，还可以通过 `LABEL` 来过滤。
 
 ```shell
 $ docker image ls -f label=com.example.version=0.1
 ```
 
-#### 以特定格式显示镜像
+示例六：使用reference完成过滤并且仅显示标签为latest的镜像。
+
+```shell
+$ docker image ls --filter=reference="*:latest"
+```
+
+示例七：以特定格式显示镜像。
 
 ```shell
 $ docker image ls -q
@@ -178,12 +168,17 @@ $ docker image ls -q
 05a60462f8ba
 ```
 
+示例八：只返回Docker主机上镜像的大小属性。
+
 ```shell
-$ docker image ls --format "{{.ID}}: {{.Repository}}"
-5f515359c7f8: redis
-05a60462f8ba: nginx
-fe9198c04d62: mongo
+$ docker image ls --format "{{.Size}}"
+73.9MB
+5.57MB
+13.3kB
+425MB
 ```
+
+示例九：按照指定的格式显示镜像ID、仓库名称、标签信息。
 
 ```shell
 $ docker image ls --format "table {{.ID}}\t{{.Repository}}\t{{.Tag}}"
@@ -191,6 +186,66 @@ IMAGE ID            REPOSITORY          TAG
 5f515359c7f8        redis               latest
 05a60462f8ba        nginx               latest
 ```
+
+### docker image pull
+
+将镜像取到Docker主机本地的操作是拉取。该命令用于将镜像拉取到本地。只需要给出镜像的仓库名字和标签，就能在官方仓库中定位一个镜像（采用 “:” 分隔）。
+
+docker image pull 可以简写为 docker pull，这两个命令的作用相同，都用于从 Docker 镜像仓库获取镜像。
+
+注意：标签为latest的镜像只是一种普通的镜像，并不保证标有latest标签的镜像是仓库中最新的镜像。（有些仓库中最新的镜像通常标签是edge）
+
+#### 命令格式
+
+```
+docker image pull [options] [DockerRegistry地址[:端口号]/]repository[:tag]
+```
+
+#### 命令说明
+
+- DockerRegistry地址：地址的格式一般是 <域名/IP>[:端口号]。默认地址是 Docker Hub。
+- repository：这里的仓库名是两段式名称，即 <用户名>/<软件名>。对于 Docker Hub，如果不给出用户名，则默认为 library，也就是官方镜像。
+- 如果没有在仓库名称后指定具体的镜像标签，则Docker默认拉取标签为latest的镜像。
+- 如果是从第三方镜像仓库服务（非Docker Hub）获取镜像，需要在镜像仓库名称前加上第三方镜像仓库服务的DNS名称。
+
+#### 选项描述
+
+- -a：拉取仓库中的所有标签的全部镜像。
+
+#### 综合示例
+
+示例一：从Ubuntu仓库中拉取标有“latest”标签的镜像。
+
+```shell
+$ docker image pull ubuntu:latest
+```
+
+示例二：从官方Mongo库拉取标签为3.3.11的镜像。
+
+```shell
+$ docker image pull mongo:3.3.11
+```
+
+示例三：从官方Alpine库拉取标签为latest的镜像。
+
+```shell
+$ docker image pull alpine
+```
+
+示例四：从Microsoft/powershell仓库中拉取标签为nanoserver的镜像
+
+```shell
+$ docker image pull microsoft/powershell:nanoserver
+```
+
+示例五：从第三方镜像仓库服务GCR获取镜像。
+
+```shell
+$ docker image pull gcr.io/nigelpoulton/tu-demo:v2
+$ docker pull gcr.azk8s.cn/google_containers/hyperkube-amd64:v1.9.2
+```
+
+
 
 ### docker image build
 
@@ -409,6 +464,64 @@ Build Cache                             0B              0B
 ## docker ps 
 
 docker ps：列出container
+
+
+
+## docker service 
+
+### docker service create
+
+
+
+## docker search
+
+### docker search
+
+docker search命令允许通过CLI的方式搜索Docker Hub。
+
+#### 命令格式
+
+```
+docker search <searchvalue> [options]
+```
+
+#### 命令说明
+
+searchvalue：表示将要搜索的内容，该命令会搜索所有“NAME”字段中包含特定字符串的仓库。“NAME”字段是仓库名称，包含了DockerID，或者非官方仓库的组织名称。
+
+##### 参数描述
+
+- --filter
+  - is-official：是否只显示官方镜像。
+  - is-automated：是否只显示自动创建的仓库。
+- --limit：默认情况下，Docker只返回25行结果。可以指定--limit参数来增加返回内容行数，最多为100行。
+
+#### 综合示例
+
+示例一：在默认的镜像仓库服务Docker Hub中，搜索NAME”字段中包含“nigelpoulton”的所有仓库。
+
+```shell
+$ docker search nigelpoulton
+NAME                                 DESCRIPTION     STARS    OFFICIAL    AUTOMATED
+nigelpoulton/pluralsight-docker-ci   Simple …   	 23                   [OK]
+nigelpoulton/tu-demo                 Voting…   		 12
+nigelpoulton/ctr-demo                Web service…    3
+...
+```
+
+注意：上面返回的镜像中既有官方的也有非官方的。如果需要只显示官方镜像，需要使用`--filter`选项。
+
+示例二：列出所有仓库名称中包含“alpine”的官方镜像：
+
+```shell
+$ docker search alpine --filter "is-official=true"
+```
+
+示例三：只显示自动创建的仓库，并且仓库名称中包含“nigelpoulton”的镜像：
+
+```shell
+$ docker search nigelpoulton --filter "is-automated=true"
+```
 
 
 
