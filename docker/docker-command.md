@@ -44,37 +44,55 @@ $ docker run -it --rm \
 - Linux Docker主机本地镜像仓库通常位于`/var/lib/docker/<storage-driver>`
 - 每个Docker镜像仓库服务（Image Registry）可以包含多个镜像仓库（Image Repository），而每个镜像仓库中又可以包含多个不同标签的镜像。因此镜像是存储在镜像仓库服务中的镜像仓库中的。Docker客户端的镜像仓库服务是可配置的，默认使用Docker Hub。
 - 同一个镜像可以根据用户需要设置多个标签。例如同时设置标签为latest和edge。在拉取镜像时，如果没有显式指定标签，默认拉取标签为latest的镜像。注意：latest是一个非强制标签，不保证指向仓库中最新的镜像。
+- 一个Docker镜像由多个松耦合的只读镜像层组成。
 
-### docker image ls
+### 镜像与分层
 
-列出已经下载下来的镜像。
+Docker镜像由一些松耦合的只读镜像层组成，Docker负责堆叠这些镜像层，并且将它们表示为单个统一的对象。
 
-#### 命令格式
+所有的Docker镜像都起始于一个基础镜像层，当进行修改或增加新的内容时，就会在当前镜像层之上，创建新的镜像层。
 
+在添加额外的镜像层的同时，镜像始终保持是当前所有镜像层的组合。如果要添加的上层镜像层中的文件，覆盖了底层镜像层中的文件，那么这个要添加的上层镜像层就是一个更新版本，它将会作为一个新镜像层添加到镜像当中。Docker通过存储引擎（新版本采用快照机制）的方式来实现镜像层堆栈，并保证多镜像层对外展示为统一的文件系统。（所有镜像层堆叠并合并，对外提供统一的视图）。
+
+当多个镜像层堆叠在一起，就构成了一个完整镜像。
+
+在拉取镜像的时候，Docker可以识别出要拉取的镜像中，哪几层已经在本地存在，多个镜像之间会共享镜像层，这样可以有效节省空间并提升性能。
+
+可以使用以下方式查看和检查构成某个镜像的分层。
+
+方式一：使用docker image pull命令。
+
+```shell
+$ docker image pull mongo
+Using default tag: latest
+latest: Pulling from library/mongo
+a1125296b23d: Pull complete
+3c742a4a0f38: Pull complete
+4c5ea3b32996: Pull complete
+1b4be91ead68: Pull complete
+af8504826779: Pull complete
+8faaabd5f8b2: Pull complete
+...
 ```
-docker image ls [options]
+
+上述一Pull complete结尾的每一行都代表了镜像中某个被拉取的镜像层，最前面的为镜像层ID。
+
+方式二：通过`docker image inspect`命令查看。
+
+```shell
+$ docker image inspect mongo
+...
+ "Layers": [
+ "sha256:88cc1a200eb9be206c4261e79d642c392d97980236a066f23434f4452f8212a7",
+ "sha256:bf509d6bc5ecd3b1a3660fb5f167ce2e320f5cc532574217cd8ba179ca06bae9",             "sha256:2af0e1f1e531af9c95e30c3f908f6431d635a173b866e39b5f480e9ff3a180b9",
+  ...
+  ]
+...
 ```
 
-#### 命令说明
+上述输出的内容中使用了镜像的SHA256散列值来标识镜像层。
 
-使用该命令可以列出已经下载下来的镜像列表，包含仓库名、标签、镜像ID、创建时间以及所占用的空间。
-
-`docker image ls` 列表中的镜像体积总和并非是所有镜像实际硬盘消耗。由于 Docker 镜像是多层存储结构，并且可以继承、复用，因此不同镜像可能会因为使用相同的基础镜像，从而拥有共同的层。由于 Docker 使用 Union FS，相同的层只需要保存一份即可，因此实际镜像硬盘占用空间很可能要比这个列表镜像大小的总和要小的多。
-
-同时，也可以使用该命令显示虚悬镜像。（具体见示例二说明）
-
-##### 参数描述
-
-- --filter ( -f )：过滤`docker image ls`命令返回的镜像列表内容。支持如下过滤器：
-  - dangling：可以指定true或false，仅返回悬虚镜像（true），或者非悬虚镜像（false）。
-  - before：返回在之前被创建的全部镜像，需要镜像名称或者ID作为参数。
-  - since：返回指定镜像之后创建的全部镜像。与before用法类似。
-  - label：根据标注（label）的名称或值，对镜像镜像过滤。
-  - reference：用于其他过滤方式
-- -a：显示全部镜像，包括顶层镜像和中间层镜像。
-- --format：对输出的内容进行格式化。
-
-#### 虚悬镜像
+### 虚悬镜像
 
 ```shell
 $ docker image ls -f dangling=true
@@ -100,7 +118,7 @@ $ docker image prune
 
 如果添加了`-a`参数，Docker会额外移除没有被任何容器使用的镜像。
 
-#### 中间层镜像
+### 中间层镜像
 
 为了加速镜像构建、重复利用资源，Docker 会利用 **中间层镜像**。中间层镜像，是其它镜像所依赖的镜像。
 
@@ -110,9 +128,83 @@ $ docker image prune
 $ docker image ls -a
 ```
 
+### 镜像摘要
+
+对于标签相同的多个镜像，如果需要区分正在使用的镜像版本是修复前还是修复后的，可以通过镜像摘要来区分。
+
+镜像摘要是镜像内容的一个散列值（内容散列），镜像内容的变更一定会导致散列值的改变。因此，如果镜像没有发生变化，它的摘要也是不可变的。
+
+可以通过`docker image ls`命令添加`--digests`参数来查看镜像摘要：
+
+```sh
+$ docker image ls --digests alpine
+REPOSITORY          TAG                 DIGEST                                                                    IMAGE ID            CREATED             SIZE
+alpine              latest              sha256:185518070891758909c9f839cf4ca393ee977ac378609f700f60a771a2dfe321   a24bb4013296        5 weeks ago         5.57MB
+
+```
+
+上述镜像的签名值即为摘要信息，如下：
+
+`sha256:185518070891758909c9f839cf4ca393ee977ac378609f700f60a771a2dfe321`
+
+目前，已经没有原生的Docker命令支持从远端镜像仓库服务（如Docker Hub）中直接获取镜像签名了，因此必须先要通过标签方式拉取镜像到本地，然后自己维护镜像的摘要列表。
+
+通过摘要拉取镜像的命令：
+
+```
+docker image pull alpine@<sha256散列值>
+```
+
+例如：先删除alpine:latest镜像，然后通过摘要再次拉取该镜像：
+
+```shell
+$ docker image rm alpine:latest
+Untagged: alpine:latest
+Untagged: alpine@sha256:185518070891758909c9f839cf4ca393ee977ac378609f700f60a771a2dfe321
+Deleted: sha256:a24bb4013296f61e89ba57005a7b3e52274d8edd3ae2077d04395f806b63d83e
+...
+$ docker image pull alpine@sha256:185518070891758909c9f839cf4ca393ee977ac378609f700f60a771a2dfe321
+sha256:185518070891758909c9f839cf4ca393ee977ac378609f700f60a771a2dfe321: Pulling from library/alpine
+df20fa9351a1: Pull complete
+...
+```
+
+
+
+### docker image ls
+
+列出已经下载下来的镜像。
+
+#### 命令格式
+
+```
+docker image ls [options]
+```
+
+#### 命令说明
+
+使用该命令可以列出已经下载下来的镜像列表，包含仓库名、标签、镜像ID、创建时间以及所占用的空间。
+
+`docker image ls` 列表中的镜像体积总和并非是所有镜像实际硬盘消耗。由于 Docker 镜像是多层存储结构，并且可以继承、复用，因此不同镜像可能会因为使用相同的基础镜像，从而拥有共同的层。由于 Docker 使用 Union FS，相同的层只需要保存一份即可，因此实际镜像硬盘占用空间很可能要比这个列表镜像大小的总和要小的多。
+
+同时，也可以使用该命令显示虚悬镜像。（具体见示例二说明）
+
+#### 参数描述
+
+- --filter ( -f )：过滤`docker image ls`命令返回的镜像列表内容。支持如下过滤器：
+  - dangling：可以指定true或false，仅返回悬虚镜像（true），或者非悬虚镜像（false）。
+  - before：返回在之前被创建的全部镜像，需要镜像名称或者ID作为参数。
+  - since：返回指定镜像之后创建的全部镜像。与before用法类似。
+  - label：根据标注（label）的名称或值，对镜像镜像过滤。
+  - reference：用于其他过滤方式
+- -a：显示全部镜像，包括顶层镜像和中间层镜像。
+- --format：对输出的内容进行格式化。
+- --digests：查看镜像的摘要信息（SHA256签名）。
+- -q：返回镜像的ID列表。
+
 #### 综合示例
 
-示例一：列出当前已下载的镜像。
+示例一：列出当前本地Docker主机上已拉取的镜像。
 
 ```shell
 $ docker image ls
@@ -160,7 +252,7 @@ $ docker image ls -f label=com.example.version=0.1
 $ docker image ls --filter=reference="*:latest"
 ```
 
-示例七：以特定格式显示镜像。
+示例七：显示本地拉取的全部镜像的ID列表。
 
 ```shell
 $ docker image ls -q
@@ -214,7 +306,7 @@ docker image pull [options] [DockerRegistry地址[:端口号]/]repository[:tag]
 
 #### 综合示例
 
-示例一：从Ubuntu仓库中拉取标有“latest”标签的镜像。
+示例一：从Ubuntu仓库中拉取标签为“latest” 的镜像。
 
 ```shell
 $ docker image pull ubuntu:latest
@@ -259,11 +351,21 @@ $ docker pull gcr.azk8s.cn/google_containers/hyperkube-amd64:v1.9.2
 $ docker image build -t test:latest
 ```
 
+### docker image inspect
 
+用于查看镜像的详细信息，包括镜像层数据和元数据。
+
+示例：查看mongo镜像的详细信息。
+
+```shell
+$ docker image inspect mongo
+```
 
 ### docker image rm
 
-删除本地镜像。
+用于删除镜像，删除操作会在当前主机上删除该镜像以及相关的镜像层。但是如果某个镜像层被多个镜像共享，那么只有当全部依赖该镜像层的镜像都被删除后，该镜像层才会被删除。
+
+当镜像存在关联的容器，并且容器处于运行（Up）或者停止（Exited）状态时，不允许删除该镜像。
 
 #### 命令格式
 
@@ -277,7 +379,7 @@ $ docker image rm [选项] <镜像1> [<镜像2> ...]
 
 可以通过`docker image ls`查看镜像的ID，然后摘取ID的前几位可以区分不同镜像的字符即可。
 
-例如：
+#### 综合示例
 
 ```shell
 $ docker image ls
@@ -311,6 +413,17 @@ node                        slim                sha256:b4f0e0bdeb578043c1ea6862f
 $ docker image rm node@sha256:b4f0e0bdeb578043c1ea6862f0d40cc4afe32a4a582f3be235a3b164422be228
 Untagged: node@sha256:b4f0e0bdeb578043c1ea6862f0d40cc4afe32a4a582f3be235a3b164422be228
 ```
+
+**示例四，删除Docker主机上的全部镜像**：
+
+```shell
+$ docker image ls -q
+340bd30ab40hf30f
+ed03f530fh0q202j
+$ docker image rm $(docker image ls -q) -f
+```
+
+上述操作，先通过`docker image ls -q`命令获取全部镜像ID，然后将其传给`docker image rm`命令执行删除镜像的操作。
 
 ### docker image命令的配合使用
 
@@ -523,7 +636,11 @@ $ docker search alpine --filter "is-official=true"
 $ docker search nigelpoulton --filter "is-automated=true"
 ```
 
+## docker history
 
+### docker history
+
+显示镜像的构建历史记录。
 
 
 
