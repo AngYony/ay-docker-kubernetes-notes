@@ -434,6 +434,38 @@ $ docker image rm $(docker image ls -q) -f
 
 上述操作，先通过`docker image ls -q`命令获取全部镜像ID，然后将其传给`docker image rm`命令执行删除镜像的操作。
 
+### docker image tag
+
+用于为指定的镜像添加一个额外的标签。
+
+#### 命令格式
+
+```
+docker image tag <current-tag> <new-tag>
+```
+
+#### 命令说明
+
+current-tag：使用`docker image build`命令构建镜像时指定的标签。
+
+该命令不需要覆盖已经存在的标签。
+
+#### 综合示例
+
+```shell
+$ docker image tag web:latest smallz/web:latest
+```
+
+### docker image push
+
+用于将镜像推送到Docker Hub中。
+
+```shell
+$ docker image push smallz/web:latest
+```
+
+
+
 ### docker image命令的配合使用
 
 示例一，删除所有仓库名为 `redis` 的镜像：
@@ -559,6 +591,7 @@ docker container run [options] <iamge> <app>
 - --name：指定新建的容器的名称。
 - -d：表示后台模式，告知容器在后台运行。即：指定启动的容器在后台运行，这种后台启动的方式不会将当前终端连接到容器当中。
 - --restart：指定容器启动时采用哪种重启策略。
+- -P：将主机的端口与容器内的端口进行映射。
 
 #### 综合示例
 
