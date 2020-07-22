@@ -328,19 +328,36 @@ $ docker image pull gcr.io/nigelpoulton/tu-demo:v2
 $ docker pull gcr.azk8s.cn/google_containers/hyperkube-amd64:v1.9.2
 ```
 
-
-
 ### docker image build
 
 根据Dockerfile中的指令来创建新的镜像。
 
+#### 命令格式
+
+```
+docker image build [选项] <镜像> <path>
+```
+
+#### 命令说明
+
 需要进入到Dockerfile文件所在的目录后，执行该命令。
+
+#### 参数描述
+
+- -t：为镜像打标签
+- -f：指定Dockerfile的路径和名称，使用-f参数可以指定位于任意路径下的任意名称的Dockerfile。构建上下文是指应用文件存放的位置，可能是本地Docker主机上的一个目录或一个远程Git库。
+- --nocache=true：可以强制忽略对缓存的使用。
+- --squash：创建一个合并的镜像。
+
+#### 综合示例
 
 示例：创建镜像名为test:latest的Docker镜像。
 
 ```shell
-$ docker image build -t test:latest
+$ docker image build -t test:latest .
 ```
+
+上述命令会构建并生成一个名为test:latest的镜像，注意：命令最后的点（.）表示Docker在进行构建的时候，使用当前目录作为构建上下文。
 
 ### docker image inspect
 
@@ -464,7 +481,27 @@ $ docker image tag web:latest smallz/web:latest
 $ docker image push smallz/web:latest
 ```
 
+### docker image history
 
+显示在构建镜像的过程中，都执行了哪些指令。
+
+```shell
+$ docker image history web:latest
+IMAGE               CREATED             CREATED BY                                      SIZE                COMMENT
+dab74052193a        15 hours ago        /bin/sh -c #(nop)  ENTRYPOINT ["node" "./app…   0B
+224a3531a754        15 hours ago        /bin/sh -c #(nop)  EXPOSE 8080                  0B
+c3ec0a945100        15 hours ago        /bin/sh -c npm install                          20.9MB
+97bbd9fb9a28        15 hours ago        /bin/sh -c #(nop) WORKDIR /src                  0B
+27359f55024b        15 hours ago        /bin/sh -c #(nop) COPY dir:8abfedb4af4f697c8…   2.29kB
+0e580c769e09        15 hours ago        /bin/sh -c apk add --update nodejs nodejs-npm   51MB
+0fb275ef5c63        15 hours ago        /bin/sh -c #(nop)  LABEL maintainer=nigelpou…   0B
+a24bb4013296        7 weeks ago         /bin/sh -c #(nop)  CMD ["/bin/sh"]              0B
+<missing>           7 weeks ago         /bin/sh -c #(nop) ADD file:c92c248239f8c7b9b…   5.57MB
+```
+
+通过该命令输出的内容，每一行都对应了Dockerfile中的一条指令，顺序是从下到上。
+
+其中SIZE列对应的数值不为零的指令，都会新建镜像层。
 
 ### docker image命令的配合使用
 
@@ -847,36 +884,52 @@ $ docker search alpine --filter "is-official=true"
 $ docker search nigelpoulton --filter "is-automated=true"
 ```
 
-## docker history
 
-### docker history
 
-显示镜像的构建历史记录。
+## docker network
 
 
 
-Dockerfile语法
+### docker network ls
 
-FROM：base image
+查看网络列表。
 
-RUN：执行命令
+```shell
+$ docker network ls
+NETWORK ID          NAME                      DRIVER              SCOPE
+cc246b1076cd        bridge                    bridge              local
+953f3bd3dcb4        counter-app_counter-net   bridge              local
+...
+```
 
-ADD：添加文件‘
 
-COPY：拷贝文件
 
-CMD：执行命令
+## docker volume
 
-EXPOSE：暴露端口
 
-WORKDIR：指定路径
 
-MAINTAINER：维护者
+### docker volume ls
 
-ENV：设定环境变量
+查看卷列表。
 
-ENTRYPOINT：容器入口
+```shell
+$ docker volume ls
+DRIVER              VOLUME NAME
+local               7f26bd74922581b42b224b44a81fb642dfd2684106a7909b148fee4bebee3875
+local               counter-app_counter-vol
+```
 
-USER：指定用户
 
-VOLUME：mount point
+
+## docker-compose
+
+### docker-compose down
+
+停止Docker Compose。
+
+```shell
+$ docker-compose down
+```
+
+
+
